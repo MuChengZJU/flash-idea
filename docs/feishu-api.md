@@ -212,6 +212,25 @@ Authorization: Bearer <tenant_access_token>
 - 应用才能被搜索到作为协作者
 - 在知识库设置中把应用添加为成员，授予编辑权限
 
+### 获取文档纯文本（拉取同步用）
+
+```
+GET /open-apis/docx/v1/documents/{document_id}/raw_content
+Authorization: Bearer <tenant_access_token>
+```
+
+响应：
+```json
+{
+  "code": 0,
+  "data": {
+    "content": "[10:00:01] 第一条消息\n[10:05:32] 第二条消息\n"
+  }
+}
+```
+
+用途：多端同步时，新设备启动后拉取云端已有消息。按 `[HH:MM:SS] text` 格式逐行解析，去重后插入本地 SQLite。
+
 ## 其他端点（备用）
 
 | 操作 | 方法 | 路径 |
@@ -220,6 +239,7 @@ Authorization: Bearer <tenant_access_token>
 | 获取文档信息 | GET | `/docx/v1/documents/{document_id}` |
 | 获取 wiki 节点 | GET | `/wiki/v2/spaces/get_node?token={node_token}` |
 | 创建 wiki 子节点 | POST | `/wiki/v2/spaces/{space_id}/nodes` |
+| 列举子节点 | GET | `/wiki/v2/spaces/{space_id}/nodes?parent_node_token={token}` |
 | 获取纯文本 | GET | `/docx/v1/documents/{document_id}/raw_content` |
 | 获取块列表 | GET | `/docx/v1/documents/{document_id}/blocks` |
 

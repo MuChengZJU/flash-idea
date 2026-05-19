@@ -81,6 +81,14 @@ pub fn run() {
                     *guard = wiki;
                 }
 
+                sync::pull_remote_messages(
+                    Arc::clone(&client_holder),
+                    Arc::clone(&db),
+                    Arc::clone(&wiki_holder),
+                    app_handle.clone(),
+                )
+                .await;
+
                 sync::sync_all_queued(client_holder, db, wiki_holder, doc_id, app_handle).await;
             });
             Ok(())

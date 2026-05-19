@@ -3,7 +3,7 @@ use std::{
     time::Duration,
 };
 
-use chrono::{DateTime, Local, NaiveTime, Utc};
+use chrono::{DateTime, Local, NaiveDate, NaiveTime, Utc};
 use feishu_client::{FeishuClient, FeishuError};
 use rusqlite::Connection;
 use serde::Serialize;
@@ -232,6 +232,134 @@ async fn find_existing_daily_doc(
     }
 }
 
+pub async fn pull_remote_messages(
+    feishu_client: Arc<RwLock<Arc<FeishuClient>>>,
+    db: Arc<Mutex<Connection>>,
+    wiki: Arc<RwLock<Option<Arc<WikiConfig>>>>,
+    app_handle: AppHandle,
+) {
+    let client = {
+        let guard = feishu_client.read().await;
+        Arc::clone(&*guard)
+    };
+    let wiki = {
+        let guard = wiki.read().await;
+        guard.clone()
+    };
+    let wiki = match wiki {
+        Some(w) => w,
+        None => return,
+    };
+
+    let now = Local::now();
+    let doc_date = if now.time() < DAY_BOUNDARY {
+        now.date_naive() - chrono::Duration::days(1)
+    } else {
+        now.date_naive()
+    };
+    let title = format!("FlashIdea - {}", doc_date.format("%Y-%m-%d"));
+
+    let doc_id = {
+        let stored = if let Ok(conn) = db.lock() {
+            db::get_setting(&conn, "active_doc_id").ok().flatten()
+        } else {
+            None
+        };
+
+        if let Some(id) = stored {
+            id
+        } else {
+            match find_existing_daily_doc(&client, &wiki, &title, "pull").await {
+                Some(id) => {
+                    if let Ok(conn) = db.lock() {
+                        let _ = db::set_setting(&conn, "active_doc_id", &id);
+                    }
+                    id
+                }
+                None => {
+                    eprintln!("pull_remote_messages: no existing doc for {title}, skip pull");
+                    return;
+                }
+            }
+        }
+    };
+
+    let raw_content = match client.get_document_raw_content(&doc_id).await {
+        Ok(c) => c,
+        Err(err) => {
+            eprintln!("pull_remote_messages: get_document_raw_content failed: {err:?}");
+            return;
+        }
+    };
+
+    let parsed = parse_remote_lines(&raw_content, doc_date);
+    if parsed.is_empty() {
+        return;
+    }
+
+    let now_str = Utc::now().to_rfc3339();
+    let mut inserted = 0u32;
+
+    if let Ok(conn) = db.lock() {
+        for (text, created_at) in &parsed {
+            let id = uuid::Uuid::new_v4().to_string();
+            match db::insert_remote_message(&conn, &id, text, created_at, &doc_id, &now_str) {
+                Ok(true) => inserted += 1,
+                Ok(false) => {}
+                Err(err) => {
+                    eprintln!("pull_remote_messages: insert failed for text={}: {err}", text);
+                }
+            }
+        }
+    }
+
+    if inserted > 0 {
+        eprintln!(
+            "pull_remote_messages: pulled {inserted} new messages from doc {doc_id}"
+        );
+        let _ = app_handle.emit("messages_updated", inserted);
+    }
+}
+
+fn parse_remote_lines(raw: &str, doc_date: NaiveDate) -> Vec<(String, String)> {
+    let mut results = Vec::new();
+    let local_offset = Local::now().offset().clone();
+
+    for line in raw.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        if let Some(rest) = line.strip_prefix('[') {
+            if let Some(bracket_end) = rest.find(']') {
+                let time_str = &rest[..bracket_end];
+                let text = rest[bracket_end + 1..].trim_start().to_string();
+                if text.is_empty() {
+                    continue;
+                }
+
+                if let Ok(time) = NaiveTime::parse_from_str(time_str, "%H:%M:%S") {
+                    let calendar_date = if time < DAY_BOUNDARY {
+                        doc_date + chrono::Duration::days(1)
+                    } else {
+                        doc_date
+                    };
+                    let naive_dt = calendar_date.and_time(time);
+                    let local_dt = naive_dt.and_local_timezone(local_offset).single();
+                    let created_at = match local_dt {
+                        Some(dt) => dt.to_rfc3339(),
+                        None => Utc::now().to_rfc3339(),
+                    };
+                    results.push((text, created_at));
+                }
+            }
+        }
+    }
+
+    results
+}
+
 pub async fn sync_message(
     feishu_client: Arc<RwLock<Arc<FeishuClient>>>,
     db: Arc<Mutex<Connection>>,
@@ -437,5 +565,38 @@ mod tests {
             Some("2026-05-18T23:00:00+08:00"),
             "2026-05-19T01:00:00+08:00"
         ));
+    }
+
+    #[test]
+    fn test_parse_remote_lines_basic() {
+        let raw = "[10:00:01] hello world\n[10:05:32] second message\n";
+        let doc_date = NaiveDate::from_ymd_opt(2026, 5, 19).unwrap();
+        let parsed = parse_remote_lines(raw, doc_date);
+
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].0, "hello world");
+        assert_eq!(parsed[1].0, "second message");
+        assert!(parsed[0].1.contains("2026-05-19"));
+    }
+
+    #[test]
+    fn test_parse_remote_lines_early_morning() {
+        let raw = "[02:30:00] late night thought\n";
+        let doc_date = NaiveDate::from_ymd_opt(2026, 5, 19).unwrap();
+        let parsed = parse_remote_lines(raw, doc_date);
+
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].0, "late night thought");
+        assert!(parsed[0].1.contains("2026-05-20"));
+    }
+
+    #[test]
+    fn test_parse_remote_lines_skips_empty() {
+        let raw = "\n\n[10:00:00] valid\n\n[bad line\n";
+        let doc_date = NaiveDate::from_ymd_opt(2026, 5, 19).unwrap();
+        let parsed = parse_remote_lines(raw, doc_date);
+
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].0, "valid");
     }
 }

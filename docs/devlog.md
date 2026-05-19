@@ -20,7 +20,11 @@
 
 **根因**：`resolve_doc_id` 只查本地 `active_doc_id` 和 `last_synced_at`，新设备没有本地状态就直接 `create_wiki_child`。
 
-**修复**：在 `resolve_doc_id` 创建子文档前，先调用 `list_wiki_children` 列出父节点下所有子节点，按标题匹配当日文档。找到就复用其 `obj_token`，找不到才创建。feishu-client 新增 `list_wiki_children` 方法（支持分页）。
+**修复**：
+1. 防重复创建：`resolve_doc_id` 创建子文档前，先调用 `list_wiki_children` 列出父节点下所有子节点，按标题匹配当日文档。找到就复用其 `obj_token`，找不到才创建
+2. 云端拉取：启动时调用 `pull_remote_messages`，读取当日文档的原始文本，解析 `[HH:MM:SS] text` 格式，按 text + doc_id 去重后插入本地 SQLite，前端收到 `messages_updated` 事件自动刷新
+
+新增 API：`list_wiki_children`（支持分页）、`get_document_raw_content`
 
 #### P1: 手机端 WebView 键盘交互
 

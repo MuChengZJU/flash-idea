@@ -226,6 +226,22 @@
     }
   }
 
+  async function reloadMessages() {
+    if (!isTauriReady()) {
+      return;
+    }
+
+    try {
+      const history = await invoke("get_messages", { limit: 50 });
+      if (Array.isArray(history)) {
+        history.forEach(renderMessage);
+        scrollToBottom();
+      }
+    } catch (error) {
+      console.warn("reloadMessages failed", error);
+    }
+  }
+
   async function sendMessage(text) {
     if (!isTauriReady()) {
       renderMessage({
@@ -289,8 +305,11 @@
           updateMessageStatus(payload.id, payload.status);
         }
       });
+      await listen("messages_updated", function () {
+        reloadMessages();
+      });
     } catch (error) {
-      console.warn("sync_status_changed listener failed", error);
+      console.warn("event listener setup failed", error);
     }
   }
 

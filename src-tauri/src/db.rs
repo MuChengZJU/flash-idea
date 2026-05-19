@@ -145,6 +145,34 @@ pub fn reset_for_retry(conn: &Connection, id: &str) -> Result<Option<Message>> {
     get_message(conn, id)
 }
 
+pub fn message_text_exists(conn: &Connection, text: &str, doc_id: &str) -> Result<bool> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM messages WHERE text = ?1 AND target_doc_id = ?2",
+        params![text, doc_id],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
+}
+
+pub fn insert_remote_message(
+    conn: &Connection,
+    id: &str,
+    text: &str,
+    created_at: &str,
+    doc_id: &str,
+    synced_at: &str,
+) -> Result<bool> {
+    if message_text_exists(conn, text, doc_id)? {
+        return Ok(false);
+    }
+    conn.execute(
+        "INSERT INTO messages (id, text, created_at, sync_status, retry_count, target_doc_id, metadata, synced_at)
+         VALUES (?1, ?2, ?3, 'synced', 0, ?4, '{\"source\":\"remote\"}', ?5)",
+        params![id, text, created_at, doc_id, synced_at],
+    )?;
+    Ok(true)
+}
+
 pub fn get_message(conn: &Connection, id: &str) -> Result<Option<Message>> {
     let mut stmt = conn.prepare(
         "
@@ -241,6 +269,46 @@ mod tests {
         let messages = get_messages(&conn, 10).expect("get messages");
         assert_eq!(messages[0].sync_status, "synced");
         assert_eq!(messages[0].synced_at.as_deref(), Some("2026-05-18T10:00:10Z"));
+    }
+
+    #[test]
+    fn test_insert_remote_message_dedup() {
+        let conn = memory_db();
+        insert_message(
+            &conn,
+            "local-1",
+            "hello flashidea",
+            "2026-05-19T10:00:00Z",
+            Some("doc-1"),
+        )
+        .expect("insert local message");
+
+        let inserted = insert_remote_message(
+            &conn,
+            "remote-1",
+            "hello flashidea",
+            "2026-05-19T10:00:01Z",
+            "doc-1",
+            "2026-05-19T10:01:00Z",
+        )
+        .expect("insert remote duplicate");
+        assert!(!inserted);
+
+        let inserted = insert_remote_message(
+            &conn,
+            "remote-2",
+            "new remote message",
+            "2026-05-19T10:02:00Z",
+            "doc-1",
+            "2026-05-19T10:03:00Z",
+        )
+        .expect("insert remote new");
+        assert!(inserted);
+
+        let messages = get_messages(&conn, 10).expect("get messages");
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[1].metadata, "{\"source\":\"remote\"}");
+        assert_eq!(messages[1].sync_status, "synced");
     }
 
     #[test]

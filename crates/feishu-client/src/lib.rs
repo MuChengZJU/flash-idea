@@ -285,6 +285,42 @@ impl FeishuClient {
         })
     }
 
+    pub async fn get_document_raw_content(
+        &self,
+        document_id: &str,
+    ) -> Result<String, FeishuError> {
+        let token = self.get_token().await?;
+        let url = format!(
+            "{}/open-apis/docx/v1/documents/{}/raw_content",
+            self.base_url, document_id
+        );
+        let (status, body) = self
+            .get_json(
+                &url,
+                &[("authorization", format!("Bearer {token}"))],
+                &[],
+            )
+            .await?;
+
+        let code = body.get("code").and_then(|v| v.as_i64()).unwrap_or(-1);
+        let msg = body.get("msg").and_then(|v| v.as_str()).unwrap_or("unknown");
+
+        if !status.is_success() || code != 0 {
+            return Err(FeishuError::ApiError {
+                code,
+                msg: msg.to_string(),
+            });
+        }
+
+        let content = body
+            .get("data")
+            .and_then(|d| d.get("content"))
+            .and_then(|c| c.as_str())
+            .unwrap_or("");
+
+        Ok(content.to_string())
+    }
+
     pub async fn list_wiki_children(
         &self,
         space_id: &str,
@@ -783,6 +819,40 @@ mod tests {
         assert_eq!(children.len(), 2);
         assert_eq!(children[0].title, "A");
         assert_eq!(children[1].title, "B");
+    }
+
+    #[tokio::test]
+    async fn test_get_document_raw_content() {
+        let (client, captured) = FeishuClient::new_with_mock_responses(
+            "app-id".to_string(),
+            "app-secret".to_string(),
+            vec![
+                MockResponse {
+                    status: 200,
+                    body: token_response("raw-token"),
+                },
+                MockResponse {
+                    status: 200,
+                    body: json!({
+                        "code": 0,
+                        "msg": "success",
+                        "data": {
+                            "content": "[10:00:01] hello\n[10:05:32] world\n"
+                        }
+                    })
+                    .to_string(),
+                },
+            ],
+        );
+
+        let content = client.get_document_raw_content("doc-abc").await.unwrap();
+        assert_eq!(content, "[10:00:01] hello\n[10:05:32] world\n");
+
+        let captured = captured.lock().unwrap();
+        assert_eq!(captured.len(), 2);
+        assert!(captured[1]
+            .path
+            .contains("/open-apis/docx/v1/documents/doc-abc/raw_content"));
     }
 
     #[tokio::test]
