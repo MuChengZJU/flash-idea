@@ -1,6 +1,16 @@
 # FlashIdea 开发日志
 
-## 2026-05-19
+## v0.2.0 — 2026-05-19
+
+### 本版本新增
+
+- **多端同步**：创建文档前查飞书子节点避免重复；启动时拉取云端文档内容补全本地历史
+- **新增飞书 API**：`list_wiki_children`（分页）、`get_document_raw_content`
+- **远程消息去重**：按 text + doc_id 匹配，metadata 标记 `source: remote`
+
+---
+
+## v0.1.0 — 2026-05-19
 
 ### 已完成
 
