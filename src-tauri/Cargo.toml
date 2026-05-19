@@ -5,6 +5,10 @@ description = "FlashIdea"
 authors = ["FlashIdea"]
 edition = "2021"
 
+[lib]
+name = "flashidea_lib"
+crate-type = ["staticlib", "cdylib", "lib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
