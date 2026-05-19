@@ -59,7 +59,7 @@ pub async fn send_message(
         synced_at: None,
     };
 
-    tokio::spawn(sync::sync_message(
+    tauri::async_runtime::spawn(sync::sync_message(
         Arc::clone(&state.feishu_client),
         Arc::clone(&state.db),
         doc_id,
@@ -95,7 +95,7 @@ pub async fn retry_message(
             .ok_or_else(|| format!("message not found: {id}"))?
     };
 
-    tokio::spawn(sync::sync_message(
+    tauri::async_runtime::spawn(sync::sync_message(
         Arc::clone(&state.feishu_client),
         Arc::clone(&state.db),
         state.doc_id.clone(),

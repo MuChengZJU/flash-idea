@@ -31,7 +31,7 @@ fn main() {
         .setup(|app| {
             let state = app.state::<AppState>();
             let app_handle = app.handle().clone();
-            tokio::spawn(sync::sync_all_queued(
+            tauri::async_runtime::spawn(sync::sync_all_queued(
                 Arc::clone(&state.feishu_client),
                 Arc::clone(&state.db),
                 state.doc_id.clone(),
