@@ -48,6 +48,31 @@
 - CSS `env(keyboard-inset-bottom)` 或 JS polyfill
 - 需要在真机上实际调试交互细节
 
+### Android 构建 & 安装
+
+环境要求：Java 17、Android SDK、NDK、Rust aarch64-linux-android target
+
+```bash
+# 设环境变量
+export PATH="$HOME/.cargo/bin:$HOME/Library/Android/sdk/platform-tools:$PATH"
+export JAVA_HOME="/opt/homebrew/Cellar/openjdk@17/17.0.15/libexec/openjdk.jdk/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export NDK_HOME="$ANDROID_HOME/ndk/$(ls $ANDROID_HOME/ndk/ | head -1)"
+
+# 构建 debug APK（手机用这个）
+cargo tauri android build --apk --debug
+
+# 卸载旧版（避免签名冲突）+ 安装
+adb shell pm uninstall com.flashidea.app
+adb install src-tauri/gen/android/app/build/outputs/apk/arm64/debug/app-arm64-debug.apk
+```
+
+踩坑记录：
+- `/usr/libexec/java_home` 默认返回 Java 11（Corretto），Gradle 需要 Java 17，必须手动指定 `JAVA_HOME`
+- release APK 未签名无法安装，开发阶段用 `--debug`
+- 首次安装或签名变更时先 `adb shell pm uninstall`，否则报 Failure [-99]
+- 目标手机 OPPO Find X7 Ultra 是 arm64，产物在 `apk/arm64/debug/` 下
+
 ### 关键设计决策
 
 | 决策 | 选项 | 选择 | 原因 |
