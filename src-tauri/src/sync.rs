@@ -142,31 +142,42 @@ async fn resolve_doc_id(
     };
     let title = format!("FlashIdea - {}", doc_date.format("%Y-%m-%d"));
 
-    eprintln!(
-        "resolve_doc_id: message_id={} create_wiki_child attempt space_id={} parent_node_token={} title={}",
-        message.id, wiki.space_id, wiki.node_token, title
-    );
-    let node = match feishu_client
-        .create_wiki_child(&wiki.space_id, &wiki.node_token, &title)
-        .await
+    let new_doc_id = match find_existing_daily_doc(feishu_client, wiki, &title, &message.id).await
     {
-        Ok(node) => {
+        Some(obj_token) => {
             eprintln!(
-                "resolve_doc_id: message_id={} create_wiki_child succeeded node_token={} obj_token={} obj_type={}",
-                message.id, node.node_token, node.obj_token, node.obj_type
+                "resolve_doc_id: message_id={} found existing doc obj_token={} for title={}",
+                message.id, obj_token, title
             );
-            node
+            obj_token
         }
-        Err(err) => {
+        None => {
             eprintln!(
-                "resolve_doc_id: message_id={} create_wiki_child failed: {:?}",
-                message.id, err
+                "resolve_doc_id: message_id={} create_wiki_child attempt space_id={} parent_node_token={} title={}",
+                message.id, wiki.space_id, wiki.node_token, title
             );
-            return Err(err);
+            let node = match feishu_client
+                .create_wiki_child(&wiki.space_id, &wiki.node_token, &title)
+                .await
+            {
+                Ok(node) => {
+                    eprintln!(
+                        "resolve_doc_id: message_id={} create_wiki_child succeeded node_token={} obj_token={} obj_type={}",
+                        message.id, node.node_token, node.obj_token, node.obj_type
+                    );
+                    node
+                }
+                Err(err) => {
+                    eprintln!(
+                        "resolve_doc_id: message_id={} create_wiki_child failed: {:?}",
+                        message.id, err
+                    );
+                    return Err(err);
+                }
+            };
+            node.obj_token
         }
     };
-
-    let new_doc_id = node.obj_token;
     match db.lock() {
         Ok(conn) => {
             if let Err(err) = db::set_setting(&conn, "active_doc_id", &new_doc_id) {
@@ -185,6 +196,40 @@ async fn resolve_doc_id(
     }
 
     Ok(new_doc_id)
+}
+
+async fn find_existing_daily_doc(
+    feishu_client: &FeishuClient,
+    wiki: &WikiConfig,
+    title: &str,
+    message_id: &str,
+) -> Option<String> {
+    match feishu_client
+        .list_wiki_children(&wiki.space_id, &wiki.node_token)
+        .await
+    {
+        Ok(children) => {
+            for child in &children {
+                if child.title == title {
+                    return Some(child.obj_token.clone());
+                }
+            }
+            eprintln!(
+                "find_existing_daily_doc: message_id={} no match for title={} among {} children",
+                message_id,
+                title,
+                children.len()
+            );
+            None
+        }
+        Err(err) => {
+            eprintln!(
+                "find_existing_daily_doc: message_id={} list_wiki_children failed: {:?}, will create new doc",
+                message_id, err
+            );
+            None
+        }
+    }
 }
 
 pub async fn sync_message(

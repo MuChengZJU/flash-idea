@@ -14,16 +14,13 @@
 
 ### 待解决
 
-#### P0: 多端同步 — 每个设备重复创建当日文档
+#### ~~P0: 多端同步 — 每个设备重复创建当日文档~~ ✅ 已修复
 
 **现象**：Mac 创建了 "FlashIdea - 2026-05-19"，手机端因为本地 SQLite 没有 `active_doc_id`，又创建了一个同名文档。
 
 **根因**：`resolve_doc_id` 只查本地 `active_doc_id` 和 `last_synced_at`，新设备没有本地状态就直接 `create_wiki_child`。
 
-**方案方向**：
-- 在创建子文档前，先通过飞书 API 列出父节点的子节点，检查是否已存在同名/同日文档
-- 如果找到，直接复用其 `obj_token`，写入 `active_doc_id`
-- 相关 API：`GET /wiki/v2/spaces/{space_id}/nodes?parent_node_token={token}` 获取子节点列表
+**修复**：在 `resolve_doc_id` 创建子文档前，先调用 `list_wiki_children` 列出父节点下所有子节点，按标题匹配当日文档。找到就复用其 `obj_token`，找不到才创建。feishu-client 新增 `list_wiki_children` 方法（支持分页）。
 
 #### P1: 手机端 WebView 键盘交互
 

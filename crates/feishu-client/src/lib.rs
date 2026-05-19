@@ -62,6 +62,21 @@ struct WikiNodeResponseData {
     node: Option<WikiNode>,
 }
 
+#[derive(Deserialize)]
+struct WikiChildrenResponse {
+    code: i64,
+    msg: String,
+    data: Option<WikiChildrenResponseData>,
+}
+
+#[derive(Deserialize)]
+struct WikiChildrenResponseData {
+    items: Option<Vec<WikiNode>>,
+    #[serde(default)]
+    has_more: bool,
+    page_token: Option<String>,
+}
+
 #[cfg(test)]
 #[derive(Clone)]
 struct MockResponse {
@@ -268,6 +283,61 @@ impl FeishuClient {
                 msg: "missing node in create_wiki_child response".into(),
             }
         })
+    }
+
+    pub async fn list_wiki_children(
+        &self,
+        space_id: &str,
+        parent_node_token: &str,
+    ) -> Result<Vec<WikiNode>, FeishuError> {
+        let token = self.get_token().await?;
+        let url = format!(
+            "{}/open-apis/wiki/v2/spaces/{}/nodes",
+            self.base_url, space_id
+        );
+        let mut all_items = Vec::new();
+        let mut page_token: Option<String> = None;
+
+        loop {
+            let mut query: Vec<(&str, &str)> = vec![
+                ("parent_node_token", parent_node_token),
+                ("page_size", "50"),
+            ];
+            let pt_owned;
+            if let Some(ref pt) = page_token {
+                pt_owned = pt.clone();
+                query.push(("page_token", &pt_owned));
+            }
+
+            let (status, body) = self
+                .get_json(
+                    &url,
+                    &[("authorization", format!("Bearer {token}"))],
+                    &query,
+                )
+                .await?;
+            let resp = serde_json::from_value::<WikiChildrenResponse>(body)
+                .map_err(|e| FeishuError::ApiError { code: -1, msg: e.to_string() })?;
+
+            if !status.is_success() || resp.code != 0 {
+                return Err(FeishuError::ApiError { code: resp.code, msg: resp.msg });
+            }
+
+            if let Some(data) = resp.data {
+                if let Some(items) = data.items {
+                    all_items.extend(items);
+                }
+                if data.has_more {
+                    page_token = data.page_token;
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(all_items)
     }
 
     async fn get_token(&self) -> Result<String, FeishuError> {
@@ -611,6 +681,108 @@ mod tests {
                 "title": "FlashIdea - 2026-05-19"
             })
         );
+    }
+
+    #[tokio::test]
+    async fn test_list_wiki_children() {
+        let (client, captured) = FeishuClient::new_with_mock_responses(
+            "app-id".to_string(),
+            "app-secret".to_string(),
+            vec![
+                MockResponse {
+                    status: 200,
+                    body: token_response("list-token"),
+                },
+                MockResponse {
+                    status: 200,
+                    body: json!({
+                        "code": 0,
+                        "msg": "success",
+                        "data": {
+                            "items": [
+                                {
+                                    "space_id": "space-123",
+                                    "node_token": "node-a",
+                                    "obj_token": "doc-a",
+                                    "obj_type": "docx",
+                                    "title": "FlashIdea - 2026-05-18"
+                                },
+                                {
+                                    "space_id": "space-123",
+                                    "node_token": "node-b",
+                                    "obj_token": "doc-b",
+                                    "obj_type": "docx",
+                                    "title": "FlashIdea - 2026-05-19"
+                                }
+                            ],
+                            "has_more": false
+                        }
+                    })
+                    .to_string(),
+                },
+            ],
+        );
+
+        let children = client
+            .list_wiki_children("space-123", "parent-node")
+            .await
+            .unwrap();
+
+        assert_eq!(children.len(), 2);
+        assert_eq!(children[0].title, "FlashIdea - 2026-05-18");
+        assert_eq!(children[1].obj_token, "doc-b");
+
+        let captured = captured.lock().unwrap();
+        assert_eq!(captured.len(), 2);
+        let list_req = &captured[1];
+        assert!(list_req.path.contains("/open-apis/wiki/v2/spaces/space-123/nodes"));
+        assert!(list_req.path.contains("parent_node_token=parent-node"));
+    }
+
+    #[tokio::test]
+    async fn test_list_wiki_children_pagination() {
+        let (client, _captured) = FeishuClient::new_with_mock_responses(
+            "app-id".to_string(),
+            "app-secret".to_string(),
+            vec![
+                MockResponse {
+                    status: 200,
+                    body: token_response("page-token"),
+                },
+                MockResponse {
+                    status: 200,
+                    body: json!({
+                        "code": 0,
+                        "msg": "success",
+                        "data": {
+                            "items": [
+                                {"space_id": "s", "node_token": "n1", "obj_token": "d1", "obj_type": "docx", "title": "A"}
+                            ],
+                            "has_more": true,
+                            "page_token": "page2"
+                        }
+                    }).to_string(),
+                },
+                MockResponse {
+                    status: 200,
+                    body: json!({
+                        "code": 0,
+                        "msg": "success",
+                        "data": {
+                            "items": [
+                                {"space_id": "s", "node_token": "n2", "obj_token": "d2", "obj_type": "docx", "title": "B"}
+                            ],
+                            "has_more": false
+                        }
+                    }).to_string(),
+                },
+            ],
+        );
+
+        let children = client.list_wiki_children("s", "parent").await.unwrap();
+        assert_eq!(children.len(), 2);
+        assert_eq!(children[0].title, "A");
+        assert_eq!(children[1].title, "B");
     }
 
     #[tokio::test]

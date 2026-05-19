@@ -160,6 +160,40 @@ Content-Type: application/json
 }
 ```
 
+### 列举子节点（查找已有文档）
+
+```
+GET /open-apis/wiki/v2/spaces/{space_id}/nodes
+Authorization: Bearer <tenant_access_token>
+```
+
+查询参数：
+- `parent_node_token`：父节点 token
+- `page_size`（可选）：每页数量，默认 50
+- `page_token`（可选）：分页 token
+
+响应：
+```json
+{
+  "code": 0,
+  "data": {
+    "items": [
+      {
+        "space_id": "7xxx",
+        "node_token": "...",
+        "obj_token": "...",
+        "obj_type": "docx",
+        "title": "FlashIdea - 2026-05-19"
+      }
+    ],
+    "has_more": false,
+    "page_token": ""
+  }
+}
+```
+
+用途：多设备同步时，先查父节点下是否已有同日文档，有就复用，避免重复创建。
+
 ### 完整调用流程
 
 1. 从 URL 提取 `node_token`（母文档节点）
