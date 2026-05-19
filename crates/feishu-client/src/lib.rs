@@ -150,7 +150,7 @@ impl FeishuClient {
             }]
         });
 
-        let (status, response_body) = self
+        let (status, response_body, _raw_response_body) = self
             .post_json(
                 &url,
                 &[("authorization", format!("Bearer {token}"))],
@@ -219,28 +219,55 @@ impl FeishuClient {
             "{}/open-apis/wiki/v2/spaces/{}/nodes",
             self.base_url, space_id
         );
-        let (status, body) = self
+        let (status, body, raw_response_body) = self
             .post_json(
                 &url,
                 &[("authorization", format!("Bearer {token}"))],
                 &[],
                 json!({
                     "obj_type": "docx",
+                    "node_type": "origin",
                     "parent_node_token": parent_node_token,
                     "title": title,
                 }),
             )
             .await?;
-        let resp = serde_json::from_value::<WikiNodeResponse>(body)
-            .map_err(|e| FeishuError::ApiError { code: -1, msg: e.to_string() })?;
+        let resp =
+            serde_json::from_value::<WikiNodeResponse>(body).map_err(|e| {
+                eprintln!(
+                    "create_wiki_child: failed to parse response status={} error={} raw_body={}",
+                    status, e, raw_response_body
+                );
+                FeishuError::ApiError {
+                    code: -1,
+                    msg: format!(
+                        "invalid create_wiki_child response: {}; raw_body={}",
+                        e, raw_response_body
+                    ),
+                }
+            })?;
 
         if !status.is_success() || resp.code != 0 {
-            return Err(FeishuError::ApiError { code: resp.code, msg: resp.msg });
+            eprintln!(
+                "create_wiki_child: API failed status={} code={} msg={} raw_body={}",
+                status, resp.code, resp.msg, raw_response_body
+            );
+            return Err(FeishuError::ApiError {
+                code: resp.code,
+                msg: resp.msg,
+            });
         }
 
-        resp.data
-            .and_then(|d| d.node)
-            .ok_or_else(|| FeishuError::ApiError { code: -1, msg: "missing node in response".into() })
+        resp.data.and_then(|d| d.node).ok_or_else(|| {
+            eprintln!(
+                "create_wiki_child: missing node in response status={} raw_body={}",
+                status, raw_response_body
+            );
+            FeishuError::ApiError {
+                code: -1,
+                msg: "missing node in create_wiki_child response".into(),
+            }
+        })
     }
 
     async fn get_token(&self) -> Result<String, FeishuError> {
@@ -261,7 +288,7 @@ impl FeishuClient {
             "{}/open-apis/auth/v3/tenant_access_token/internal",
             self.base_url
         );
-        let (status, response_body) = self
+        let (status, response_body, _raw_response_body) = self
             .post_json(
                 &url,
                 &[],
@@ -301,7 +328,7 @@ impl FeishuClient {
         headers: &[(&str, String)],
         query: &[(&str, &str)],
         body: serde_json::Value,
-    ) -> Result<(StatusCode, serde_json::Value), FeishuError> {
+    ) -> Result<(StatusCode, serde_json::Value, String), FeishuError> {
         #[cfg(test)]
         if let Some(mock) = &self.mock_transport {
             let mut path = url
@@ -327,8 +354,9 @@ impl FeishuClient {
             });
             let response = mock.responses.lock().unwrap().remove(0);
             let status = StatusCode::from_u16(response.status).unwrap();
-            let body = serde_json::from_str(&response.body).unwrap_or_else(|_| json!({}));
-            return Ok((status, body));
+            let raw_body = response.body;
+            let body = serde_json::from_str(&raw_body).unwrap_or_else(|_| json!({}));
+            return Ok((status, body, raw_body));
         }
 
         let mut request = self.http_client.post(url).json(&body);
@@ -340,11 +368,10 @@ impl FeishuClient {
         }
         let response = request.send().await.map_err(map_reqwest_error)?;
         let status = response.status();
-        let body = response
-            .json::<serde_json::Value>()
-            .await
+        let raw_body = response.text().await.map_err(map_reqwest_error)?;
+        let body = serde_json::from_str::<serde_json::Value>(&raw_body)
             .unwrap_or_else(|_| json!({}));
-        Ok((status, body))
+        Ok((status, body, raw_body))
     }
 
     async fn get_json(
@@ -528,6 +555,93 @@ mod tests {
             .count();
         assert_eq!(token_requests, 1);
         assert_eq!(captured.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_create_wiki_child_request_and_response() {
+        let (client, captured) = FeishuClient::new_with_mock_responses(
+            "app-id".to_string(),
+            "app-secret".to_string(),
+            vec![
+                MockResponse {
+                    status: 200,
+                    body: token_response("wiki-token"),
+                },
+                MockResponse {
+                    status: 200,
+                    body: json!({
+                        "code": 0,
+                        "msg": "success",
+                        "data": {
+                            "node": {
+                                "space_id": "space-123",
+                                "node_token": "wiki-node",
+                                "obj_token": "docx-token",
+                                "obj_type": "docx",
+                                "title": "FlashIdea - 2026-05-19"
+                            }
+                        }
+                    })
+                    .to_string(),
+                },
+            ],
+        );
+
+        let node = client
+            .create_wiki_child("space-123", "parent-node", "FlashIdea - 2026-05-19")
+            .await
+            .unwrap();
+
+        assert_eq!(node.obj_token, "docx-token");
+        assert_eq!(node.obj_type, "docx");
+
+        let captured = captured.lock().unwrap();
+        assert_eq!(captured.len(), 2);
+        let create = &captured[1];
+        assert_eq!(create.path, "/open-apis/wiki/v2/spaces/space-123/nodes");
+        assert!(create
+            .headers
+            .contains(&("authorization".to_string(), "Bearer wiki-token".to_string())));
+        assert_eq!(
+            create.body,
+            json!({
+                "obj_type": "docx",
+                "node_type": "origin",
+                "parent_node_token": "parent-node",
+                "title": "FlashIdea - 2026-05-19"
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_wiki_child_reports_raw_invalid_json_body() {
+        let (client, _captured) = FeishuClient::new_with_mock_responses(
+            "app-id".to_string(),
+            "app-secret".to_string(),
+            vec![
+                MockResponse {
+                    status: 200,
+                    body: token_response("wiki-token"),
+                },
+                MockResponse {
+                    status: 500,
+                    body: "upstream failure".to_string(),
+                },
+            ],
+        );
+
+        let err = client
+            .create_wiki_child("space-123", "parent-node", "FlashIdea - 2026-05-19")
+            .await
+            .unwrap_err();
+
+        match err {
+            FeishuError::ApiError { msg, .. } => {
+                assert!(msg.contains("invalid create_wiki_child response"));
+                assert!(msg.contains("upstream failure"));
+            }
+            other => panic!("expected ApiError, got {other:?}"),
+        }
     }
 
     #[tokio::test]

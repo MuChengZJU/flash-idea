@@ -776,6 +776,7 @@ dependencies = [
 name = "feishu-client"
 version = "0.1.0"
 dependencies = [
+ "dotenvy",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

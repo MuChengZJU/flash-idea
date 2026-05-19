@@ -76,21 +76,59 @@ async fn resolve_doc_id(
     message: &Message,
 ) -> Result<String, FeishuError> {
     let (active_doc, last_synced) = {
+        eprintln!(
+            "resolve_doc_id: message_id={} checking active_doc_id and last synced message",
+            message.id
+        );
         let conn = db.lock().map_err(|e| FeishuError::ApiError {
             code: -1,
             msg: e.to_string(),
         })?;
-        let doc = db::get_setting(&conn, "active_doc_id")
-            .ok()
-            .flatten();
-        let last = db::get_last_synced_at(&conn).ok().flatten();
+        let doc = match db::get_setting(&conn, "active_doc_id") {
+            Ok(value) => value,
+            Err(err) => {
+                eprintln!(
+                    "resolve_doc_id: message_id={} failed reading active_doc_id: {}",
+                    message.id, err
+                );
+                None
+            }
+        };
+        let last = match db::get_last_synced_at(&conn) {
+            Ok(value) => value,
+            Err(err) => {
+                eprintln!(
+                    "resolve_doc_id: message_id={} failed reading last synced message: {}",
+                    message.id, err
+                );
+                None
+            }
+        };
+        eprintln!(
+            "resolve_doc_id: message_id={} active_doc_id={:?} last_synced_at={:?}",
+            message.id, doc, last
+        );
         (doc, last)
     };
 
     if let Some(ref doc_id) = active_doc {
-        if !needs_new_doc(last_synced.as_deref(), &message.created_at) {
+        let create_new_doc = needs_new_doc(last_synced.as_deref(), &message.created_at);
+        eprintln!(
+            "resolve_doc_id: message_id={} needs_new_doc={} active_doc_id={} message_created_at={}",
+            message.id, create_new_doc, doc_id, message.created_at
+        );
+        if !create_new_doc {
+            eprintln!(
+                "resolve_doc_id: message_id={} reusing active_doc_id={}",
+                message.id, doc_id
+            );
             return Ok(doc_id.clone());
         }
+    } else {
+        eprintln!(
+            "resolve_doc_id: message_id={} no active_doc_id found; will create wiki child",
+            message.id
+        );
     }
 
     let now = DateTime::parse_from_rfc3339(&message.created_at)
@@ -104,13 +142,46 @@ async fn resolve_doc_id(
     };
     let title = format!("FlashIdea - {}", doc_date.format("%Y-%m-%d"));
 
-    let node = feishu_client
+    eprintln!(
+        "resolve_doc_id: message_id={} create_wiki_child attempt space_id={} parent_node_token={} title={}",
+        message.id, wiki.space_id, wiki.node_token, title
+    );
+    let node = match feishu_client
         .create_wiki_child(&wiki.space_id, &wiki.node_token, &title)
-        .await?;
+        .await
+    {
+        Ok(node) => {
+            eprintln!(
+                "resolve_doc_id: message_id={} create_wiki_child succeeded node_token={} obj_token={} obj_type={}",
+                message.id, node.node_token, node.obj_token, node.obj_type
+            );
+            node
+        }
+        Err(err) => {
+            eprintln!(
+                "resolve_doc_id: message_id={} create_wiki_child failed: {:?}",
+                message.id, err
+            );
+            return Err(err);
+        }
+    };
 
     let new_doc_id = node.obj_token;
-    if let Ok(conn) = db.lock() {
-        let _ = db::set_setting(&conn, "active_doc_id", &new_doc_id);
+    match db.lock() {
+        Ok(conn) => {
+            if let Err(err) = db::set_setting(&conn, "active_doc_id", &new_doc_id) {
+                eprintln!(
+                    "resolve_doc_id: message_id={} failed saving active_doc_id={}: {}",
+                    message.id, new_doc_id, err
+                );
+            }
+        }
+        Err(err) => {
+            eprintln!(
+                "resolve_doc_id: message_id={} failed locking db to save active_doc_id={}: {}",
+                message.id, new_doc_id, err
+            );
+        }
     }
 
     Ok(new_doc_id)
@@ -127,7 +198,28 @@ pub async fn sync_message(
     let doc_id = if let Some(ref wiki) = wiki {
         match resolve_doc_id(&feishu_client, &db, wiki, &message).await {
             Ok(id) => id,
-            Err(_) => fallback_doc_id.clone(),
+            Err(err) => {
+                eprintln!(
+                    "sync_message: message_id={} resolve_doc_id failed: {:?}",
+                    message.id, err
+                );
+                if fallback_doc_id.trim().is_empty() {
+                    eprintln!(
+                        "sync_message: message_id={} marking failed because resolve_doc_id failed and fallback_doc_id is empty; append_text will not be called",
+                        message.id
+                    );
+                    if let Ok(conn) = db.lock() {
+                        let _ = db::update_sync_status(&conn, &message.id, "failed", None);
+                    }
+                    emit_status(&app_handle, &message.id, "failed");
+                    return;
+                }
+                eprintln!(
+                    "sync_message: message_id={} using fallback_doc_id after resolve_doc_id failure",
+                    message.id
+                );
+                fallback_doc_id.clone()
+            }
         }
     } else {
         fallback_doc_id.clone()
@@ -157,7 +249,7 @@ pub async fn sync_message(
                 rate_limited_once = true;
                 sleep(Duration::from_millis(350)).await;
             }
-            Err(FeishuError::NetworkError(_)) => {
+            Err(err @ FeishuError::NetworkError(_)) => {
                 let retry_count = if let Ok(conn) = db.lock() {
                     db::increment_retry(&conn, &message.id).unwrap_or(message.retry_count + 1)
                 } else {
@@ -165,6 +257,10 @@ pub async fn sync_message(
                 };
 
                 if retry_count >= 5 {
+                    eprintln!(
+                        "sync_message: message_id={} marking failed after append_text network error with retry_count={}: {:?}",
+                        message.id, retry_count, err
+                    );
                     if let Ok(conn) = db.lock() {
                         let _ = db::update_sync_status(&conn, &message.id, "failed", None);
                     }
@@ -172,9 +268,13 @@ pub async fn sync_message(
                 }
                 return;
             }
-            Err(FeishuError::RateLimited)
-            | Err(FeishuError::AuthError(_))
-            | Err(FeishuError::ApiError { .. }) => {
+            Err(err @ FeishuError::RateLimited)
+            | Err(err @ FeishuError::AuthError(_))
+            | Err(err @ FeishuError::ApiError { .. }) => {
+                eprintln!(
+                    "sync_message: message_id={} marking failed after append_text error: {:?}",
+                    message.id, err
+                );
                 if let Ok(conn) = db.lock() {
                     let _ = db::update_sync_status(&conn, &message.id, "failed", None);
                 }

@@ -138,6 +138,7 @@ Content-Type: application/json
 ```json
 {
   "obj_type": "docx",
+  "node_type": "origin",
   "parent_node_token": "Fxr3wDmpAiTBELkjLdkcgAYOn5u",
   "title": "FlashIdea - 2026-05-19"
 }
