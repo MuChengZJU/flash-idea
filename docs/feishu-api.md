@@ -91,13 +91,91 @@ FlashIdea 的同步间隔设为 350ms（约 2.8次/秒），留有余量。
 
 利用 `client_token` 查询参数实现幂等：每条消息用 message UUID 作为 client_token，崩溃后重试不会在飞书文档中产生重复段落。
 
+## 知识库 Wiki API（文档分割用）
+
+### URL 结构
+
+飞书知识库 URL 格式：`https://xxx.feishu.cn/wiki/{node_token}`
+
+例：`https://my.feishu.cn/wiki/Fxr3wDmpAiTBELkjLdkcgAYOn5u`
+- `Fxr3wDmpAiTBELkjLdkcgAYOn5u` 是 **node_token**（知识库节点 token）
+- 每个 node 背后挂载一个真实文档，真实文档有自己的 `obj_token`
+
+### 获取节点信息（从 node_token 拿 space_id 和 obj_token）
+
+```
+GET /open-apis/wiki/v2/spaces/get_node?token={node_token}
+Authorization: Bearer <tenant_access_token>
+```
+
+响应：
+```json
+{
+  "code": 0,
+  "data": {
+    "node": {
+      "space_id": "7xxx",
+      "node_token": "Fxr3wDmpAiTBELkjLdkcgAYOn5u",
+      "obj_token": "dcnXXXXXX",
+      "obj_type": "docx",
+      "parent_node_token": "...",
+      "title": "FlashIdea",
+      "has_child": true
+    }
+  }
+}
+```
+
+### 在知识库中创建子节点（创建子文档）
+
+```
+POST /open-apis/wiki/v2/spaces/{space_id}/nodes
+Authorization: Bearer <tenant_access_token>
+Content-Type: application/json
+```
+
+请求体：
+```json
+{
+  "obj_type": "docx",
+  "parent_node_token": "Fxr3wDmpAiTBELkjLdkcgAYOn5u",
+  "title": "FlashIdea - 2026-05-19"
+}
+```
+
+响应：
+```json
+{
+  "code": 0,
+  "data": {
+    "node": {
+      "space_id": "7xxx",
+      "node_token": "新node_token",
+      "obj_token": "新obj_token（用于 docx API 写内容）",
+      "obj_type": "docx",
+      "title": "FlashIdea - 2026-05-19"
+    }
+  }
+}
+```
+
+### 完整调用流程
+
+1. 从 URL 提取 `node_token`（母文档节点）
+2. `GET /wiki/v2/spaces/get_node?token={node_token}` → 拿到 `space_id`
+3. `POST /wiki/v2/spaces/{space_id}/nodes` → 创建子文档，拿到 `obj_token`
+4. 用 `obj_token` 作为 document_id 调用 docx API 写入内容
+
 ## 权限配置
 
 在飞书开发者后台（https://open.feishu.cn/app）创建自建应用后，需开通：
 - `docx:document` — 读写文档（必需）
-- `drive:drive` — 访问云空间文件夹（Sprint 2 自动创建文档时需要）
+- `wiki:wiki` — 查看、编辑和管理知识库（文档分割必需）
 
-创建后需**发布应用**，权限才生效。
+创建后需**发布应用版本**（版本管理与发布 → 创建版本 → 设置可用范围 → 发布），发布后：
+- 权限才生效
+- 应用才能被搜索到作为协作者
+- 在知识库设置中把应用添加为成员，授予编辑权限
 
 ## 其他端点（备用）
 
@@ -105,10 +183,13 @@ FlashIdea 的同步间隔设为 350ms（约 2.8次/秒），留有余量。
 |------|------|------|
 | 创建文档 | POST | `/docx/v1/documents` |
 | 获取文档信息 | GET | `/docx/v1/documents/{document_id}` |
+| 获取 wiki 节点 | GET | `/wiki/v2/spaces/get_node?token={node_token}` |
+| 创建 wiki 子节点 | POST | `/wiki/v2/spaces/{space_id}/nodes` |
 | 获取纯文本 | GET | `/docx/v1/documents/{document_id}/raw_content` |
 | 获取块列表 | GET | `/docx/v1/documents/{document_id}/blocks` |
 
 参考：
 - 创建块：https://open.feishu.cn/document/ukTMukTMukTM/uUDN04SN0QjL1QDN/document-docx/docx-v1/document-block-children/create
-- 数据结构：https://open.feishu.cn/document/ukTMukTMukTM/uUDN04SN0QjL1QDN/document-docx/docx-v1/data-structure/block
+- 知识库节点：https://open.feishu.cn/document/server-docs/docs/wiki-v2/space-node/create
+- 获取节点信息：https://open.feishu.cn/document/server-docs/docs/wiki-v2/space-node/get_node
 - API 调试台：https://open.feishu.cn/api-explorer/

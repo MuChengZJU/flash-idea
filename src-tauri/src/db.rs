@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, Result, Row};
+use rusqlite::{params, Connection, OptionalExtension, Result, Row};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -27,9 +27,43 @@ pub fn init_db(path: &str) -> Result<Connection> {
             metadata TEXT NOT NULL DEFAULT '{}',
             synced_at TEXT
         );
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
         ",
     )?;
     Ok(conn)
+}
+
+pub fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>> {
+    let mut stmt = conn.prepare("SELECT value FROM settings WHERE key = ?1")?;
+    let mut rows = stmt.query_map([key], |row| row.get(0))?;
+    rows.next().transpose()
+}
+
+pub fn set_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+        params![key, value],
+    )?;
+    Ok(())
+}
+
+pub fn get_last_synced_at(conn: &Connection) -> Result<Option<String>> {
+    conn.query_row(
+        "SELECT created_at FROM messages WHERE sync_status = 'synced' ORDER BY created_at DESC LIMIT 1",
+        [],
+        |row| row.get(0),
+    ).optional()
+}
+
+pub fn update_target_doc_id(conn: &Connection, id: &str, doc_id: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE messages SET target_doc_id = ?1 WHERE id = ?2",
+        params![doc_id, id],
+    )?;
+    Ok(())
 }
 
 pub fn insert_message(

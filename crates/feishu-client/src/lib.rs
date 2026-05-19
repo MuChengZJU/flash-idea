@@ -40,6 +40,28 @@ struct ApiResponse {
     msg: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct WikiNode {
+    pub space_id: String,
+    pub node_token: String,
+    pub obj_token: String,
+    pub obj_type: String,
+    #[serde(default)]
+    pub title: String,
+}
+
+#[derive(Deserialize)]
+struct WikiNodeResponse {
+    code: i64,
+    msg: String,
+    data: Option<WikiNodeResponseData>,
+}
+
+#[derive(Deserialize)]
+struct WikiNodeResponseData {
+    node: Option<WikiNode>,
+}
+
 #[cfg(test)]
 #[derive(Clone)]
 struct MockResponse {
@@ -161,6 +183,66 @@ impl FeishuClient {
         Ok(())
     }
 
+    pub async fn get_wiki_node(&self, node_token: &str) -> Result<WikiNode, FeishuError> {
+        let token = self.get_token().await?;
+        let url = format!(
+            "{}/open-apis/wiki/v2/spaces/get_node",
+            self.base_url
+        );
+        let (status, body) = self
+            .get_json(
+                &url,
+                &[("authorization", format!("Bearer {token}"))],
+                &[("token", node_token)],
+            )
+            .await?;
+        let resp = serde_json::from_value::<WikiNodeResponse>(body)
+            .map_err(|e| FeishuError::ApiError { code: -1, msg: e.to_string() })?;
+
+        if !status.is_success() || resp.code != 0 {
+            return Err(FeishuError::ApiError { code: resp.code, msg: resp.msg });
+        }
+
+        resp.data
+            .and_then(|d| d.node)
+            .ok_or_else(|| FeishuError::ApiError { code: -1, msg: "missing node in response".into() })
+    }
+
+    pub async fn create_wiki_child(
+        &self,
+        space_id: &str,
+        parent_node_token: &str,
+        title: &str,
+    ) -> Result<WikiNode, FeishuError> {
+        let token = self.get_token().await?;
+        let url = format!(
+            "{}/open-apis/wiki/v2/spaces/{}/nodes",
+            self.base_url, space_id
+        );
+        let (status, body) = self
+            .post_json(
+                &url,
+                &[("authorization", format!("Bearer {token}"))],
+                &[],
+                json!({
+                    "obj_type": "docx",
+                    "parent_node_token": parent_node_token,
+                    "title": title,
+                }),
+            )
+            .await?;
+        let resp = serde_json::from_value::<WikiNodeResponse>(body)
+            .map_err(|e| FeishuError::ApiError { code: -1, msg: e.to_string() })?;
+
+        if !status.is_success() || resp.code != 0 {
+            return Err(FeishuError::ApiError { code: resp.code, msg: resp.msg });
+        }
+
+        resp.data
+            .and_then(|d| d.node)
+            .ok_or_else(|| FeishuError::ApiError { code: -1, msg: "missing node in response".into() })
+    }
+
     async fn get_token(&self) -> Result<String, FeishuError> {
         if let Some(cached) = self.token_cache.read().await.as_ref() {
             if cached.expires_at > Instant::now() + TOKEN_REFRESH_BUFFER {
@@ -250,6 +332,57 @@ impl FeishuClient {
         }
 
         let mut request = self.http_client.post(url).json(&body);
+        for (name, value) in headers {
+            request = request.header(*name, value);
+        }
+        if !query.is_empty() {
+            request = request.query(query);
+        }
+        let response = request.send().await.map_err(map_reqwest_error)?;
+        let status = response.status();
+        let body = response
+            .json::<serde_json::Value>()
+            .await
+            .unwrap_or_else(|_| json!({}));
+        Ok((status, body))
+    }
+
+    async fn get_json(
+        &self,
+        url: &str,
+        headers: &[(&str, String)],
+        query: &[(&str, &str)],
+    ) -> Result<(StatusCode, serde_json::Value), FeishuError> {
+        #[cfg(test)]
+        if let Some(mock) = &self.mock_transport {
+            let mut path = url
+                .strip_prefix(&self.base_url)
+                .unwrap_or(url)
+                .to_string();
+            if !query.is_empty() {
+                let qs = query
+                    .iter()
+                    .map(|(name, value)| format!("{name}={value}"))
+                    .collect::<Vec<_>>()
+                    .join("&");
+                path.push('?');
+                path.push_str(&qs);
+            }
+            mock.captured.lock().unwrap().push(CapturedRequest {
+                path,
+                headers: headers
+                    .iter()
+                    .map(|(name, value)| (name.to_string(), value.clone()))
+                    .collect(),
+                body: json!(null),
+            });
+            let response = mock.responses.lock().unwrap().remove(0);
+            let status = StatusCode::from_u16(response.status).unwrap();
+            let body = serde_json::from_str(&response.body).unwrap_or_else(|_| json!({}));
+            return Ok((status, body));
+        }
+
+        let mut request = self.http_client.get(url);
         for (name, value) in headers {
             request = request.header(*name, value);
         }

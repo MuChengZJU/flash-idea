@@ -9,13 +9,14 @@ use uuid::Uuid;
 
 use crate::{
     db::{self, Message},
-    sync,
+    sync::{self, WikiConfig},
 };
 
 pub struct AppState {
     pub db: Arc<Mutex<Connection>>,
     pub feishu_client: Arc<FeishuClient>,
     pub doc_id: String,
+    pub wiki: Arc<Mutex<Option<Arc<WikiConfig>>>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -40,11 +41,10 @@ pub async fn send_message(
 
     let id = Uuid::new_v4().to_string();
     let created_at = Utc::now().to_rfc3339();
-    let doc_id = state.doc_id.clone();
 
     {
         let conn = state.db.lock().map_err(|err| err.to_string())?;
-        db::insert_message(&conn, &id, &text, &created_at, Some(&doc_id))
+        db::insert_message(&conn, &id, &text, &created_at, None)
             .map_err(|err| err.to_string())?;
     }
 
@@ -54,15 +54,18 @@ pub async fn send_message(
         created_at,
         sync_status: "queued".to_string(),
         retry_count: 0,
-        target_doc_id: Some(doc_id.clone()),
+        target_doc_id: None,
         metadata: "{}".to_string(),
         synced_at: None,
     };
 
+    let wiki = state.wiki.lock().ok().and_then(|g| g.clone());
+
     tauri::async_runtime::spawn(sync::sync_message(
         Arc::clone(&state.feishu_client),
         Arc::clone(&state.db),
-        doc_id,
+        wiki,
+        state.doc_id.clone(),
         message,
         app_handle,
     ));
@@ -95,9 +98,12 @@ pub async fn retry_message(
             .ok_or_else(|| format!("message not found: {id}"))?
     };
 
+    let wiki = state.wiki.lock().ok().and_then(|g| g.clone());
+
     tauri::async_runtime::spawn(sync::sync_message(
         Arc::clone(&state.feishu_client),
         Arc::clone(&state.db),
+        wiki,
         state.doc_id.clone(),
         message,
         app_handle,
