@@ -27,7 +27,8 @@ flashidea/
 │   ├── style.css
 │   └── app.js
 └── docs/                     # 文档
-    ├── design.md             # 设计文档（最终版）
+    ├── design.md             # 产品/架构设计文档
+    ├── visual-design.md      # 视觉设计系统（闪电琥珀）
     ├── dev-plan.md           # 开发计划（AI 可执行）
     └── feishu-api.md         # 飞书 API 速查
 ```
@@ -41,11 +42,12 @@ flashidea/
 
 ## 关键设计决策
 
-详见 `docs/design.md` 架构决策章节。核心要点：
+架构决策详见 `docs/design.md`，视觉设计详见 `docs/visual-design.md`。核心要点：
 - IPC: Tauri Command（send_message 写 SQLite 后立即返回，不等网络）
 - 同步通知: Command + Event 混合（SQLite 是状态真相来源）
 - 飞书幂等: 用消息 UUID 作为 client_token
 - 冷启动目标: < 500ms（T4 - T0）
+- 视觉方向: 闪电琥珀（暖黄色调），设计锚点"秒开"
 
 ## 开发计划
 
