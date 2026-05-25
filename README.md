@@ -143,6 +143,12 @@ flashidea/
 └── docs/                      # 设计文档、开发日志
 ```
 
+## 交流
+
+加入 [Flash Idea 用户群](https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=8afj98e4-e240-4201-8cb4-b1d09ce6ba82)，反馈问题、交流想法：
+
+<img src="docs/assets/feishu-group-qr.jpg" width="300" alt="Flash Idea 用户群二维码" />
+
 ## License
 
 MIT
