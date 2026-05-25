@@ -1,5 +1,41 @@
 # Flash Idea 开发日志
 
+## v0.2.3 — 2026-05-25
+
+### 全局重命名 FlashIdea → Flash Idea / flash-idea
+
+**动机**：PascalCase `FlashIdea` 中 `shI` 视觉上分不开，统一为 `Flash Idea`（显示名）+ `flash-idea`（代码标识符）。
+
+**改动范围**：24 个文件
+
+| 层面 | 旧 | 新 |
+|------|-----|-----|
+| 显示名 | FlashIdea | Flash Idea |
+| Cargo crate | flashidea | flash-idea |
+| Rust lib | flashidea_lib | flash_idea_lib |
+| SQLite 文件 | flashidea.sqlite | flash-idea.sqlite |
+| 环境变量 | FLASHIDEA_DB_PATH | FLASH_IDEA_DB_PATH |
+| 飞书文档标题 | FlashIdea - 日期 | Flash Idea - 日期 |
+| CI 产物 | FlashIdea_版本.apk | Flash-Idea_版本.apk |
+| GitHub 仓库 | MuChengZJU/FlashIdea | MuChengZJU/flash-idea |
+| 本地文件夹 | cc-workspace/FlashIdea | cc-workspace/flash-idea |
+
+**不改的东西**（改了会出事）：
+- Android 包名 `com.flashidea.app`：Java 包名不能有连字符，改了旧版覆盖安装会失败
+- Android theme 名 `Theme.flashidea`：跟包名绑定
+
+**向后兼容**：
+- SQLite：启动时检查旧文件 `flashidea.sqlite` 是否存在，存在就继续用
+- 环境变量：先读 `FLASH_IDEA_DB_PATH`，读不到回退 `FLASHIDEA_DB_PATH`
+- 飞书文档：`find_existing_daily_doc` 同时匹配新旧两种标题格式（一次 API 调用）
+
+**配套迁移**：
+- Claude 项目记忆：`cp -a ~/.claude/projects/-*-FlashIdea/memory ~/.claude/projects/-*-flash-idea/memory`
+- gstack 项目数据：`cp -a ~/.gstack/projects/FlashIdea ~/.gstack/projects/flash-idea`
+- Git remote：`git remote set-url origin https://github.com/MuChengZJU/flash-idea.git`
+
+---
+
 ## v0.2.2 — 2026-05-25
 
 ### 新增
