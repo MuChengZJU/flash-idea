@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "FlashIdea",
+  "productName": "Flash Idea",
   "version": "0.2.2",
   "identifier": "com.flashidea.app",
   "build": {
@@ -10,7 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "FlashIdea",
+        "title": "Flash Idea",
         "width": 400,
         "height": 700
       }

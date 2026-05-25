@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    flashidea_lib::run();
+    flash_idea_lib::run();
 }

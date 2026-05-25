@@ -1,4 +1,4 @@
-# FlashIdea
+# Flash Idea
 
 零摩擦语音捕捉管道。点击图标 → 聊天气泡界面 → 语音转文字（豆包输入法）→ 发送 → 自动追加到飞书云文档。
 
@@ -12,7 +12,7 @@
 ## 项目结构
 
 ```
-flashidea/
+flash-idea/
 ├── Cargo.toml                # workspace root
 ├── crates/
 │   └── feishu-client/        # 独立 crate，无 Tauri 依赖

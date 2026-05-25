@@ -227,7 +227,7 @@ mod tests {
         insert_message(
             &conn,
             "message-1",
-            "hello flashidea",
+            "hello flash-idea",
             "2026-05-18T10:00:00Z",
             Some("doc-1"),
         )
@@ -237,7 +237,7 @@ mod tests {
 
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].id, "message-1");
-        assert_eq!(messages[0].text, "hello flashidea");
+        assert_eq!(messages[0].text, "hello flash-idea");
         assert_eq!(messages[0].created_at, "2026-05-18T10:00:00Z");
         assert_eq!(messages[0].sync_status, "queued");
         assert_eq!(messages[0].retry_count, 0);
@@ -252,7 +252,7 @@ mod tests {
         insert_message(
             &conn,
             "message-1",
-            "hello flashidea",
+            "hello flash-idea",
             "2026-05-18T10:00:00Z",
             Some("doc-1"),
         )
@@ -277,7 +277,7 @@ mod tests {
         insert_message(
             &conn,
             "local-1",
-            "hello flashidea",
+            "hello flash-idea",
             "2026-05-19T10:00:00Z",
             Some("doc-1"),
         )
@@ -286,7 +286,7 @@ mod tests {
         let inserted = insert_remote_message(
             &conn,
             "remote-1",
-            "hello flashidea",
+            "hello flash-idea",
             "2026-05-19T10:00:01Z",
             "doc-1",
             "2026-05-19T10:01:00Z",

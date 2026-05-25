@@ -77,27 +77,27 @@ jobs:
       - name: Generate signing key
         run: |
           keytool -genkey -v -keystore release.keystore \
-            -alias flashidea -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass flashidea -keypass flashidea \
-            -dname "CN=FlashIdea, O=FlashIdea, L=Unknown, ST=Unknown, C=CN"
+            -alias flash-idea -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass flash-idea -keypass flash-idea \
+            -dname "CN=Flash Idea, O=Flash Idea, L=Unknown, ST=Unknown, C=CN"
 
       - name: Build Android APK (release)
         run: cargo tauri android build --apk --target aarch64
         env:
           SIGNING_STORE_FILE: ${{ github.workspace }}/release.keystore
-          SIGNING_STORE_PASSWORD: flashidea
-          SIGNING_KEY_ALIAS: flashidea
-          SIGNING_KEY_PASSWORD: flashidea
+          SIGNING_STORE_PASSWORD: flash-idea
+          SIGNING_KEY_ALIAS: flash-idea
+          SIGNING_KEY_PASSWORD: flash-idea
 
       - name: Rename APK
         run: |
           APK=$(find src-tauri/gen/android -name "*.apk" -type f | head -1)
           VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
-          cp "$APK" "FlashIdea_${VERSION}_arm64.apk"
+          cp "$APK" "Flash-Idea_${VERSION}_arm64.apk"
 
       - name: Upload APK to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: FlashIdea_*.apk
+          files: Flash-Idea_*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

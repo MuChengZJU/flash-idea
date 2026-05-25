@@ -1,4 +1,4 @@
-# Conversation Title: 语音捕捉需求探索 — FlashIdea 项目起源
+# Conversation Title: 语音捕捉需求探索 — Flash Idea 项目起源
 Original URL: https://claude.ai/chat/b62f9ea2-195a-4bb0-bc15-7333198cc049
 Platform: Claude
 Created At: 2026-05-16 16:14:45

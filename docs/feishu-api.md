@@ -85,7 +85,7 @@ Content-Type: application/json; charset=utf-8
 | 应用级 | 3 次/秒 | HTTP 400 + error 99991400 |
 | 单文档级 | 3 并发编辑/秒 | HTTP 429 |
 
-FlashIdea 的同步间隔设为 350ms（约 2.8次/秒），留有余量。
+Flash Idea 的同步间隔设为 350ms（约 2.8次/秒），留有余量。
 
 ### 幂等性
 
@@ -119,7 +119,7 @@ Authorization: Bearer <tenant_access_token>
       "obj_token": "dcnXXXXXX",
       "obj_type": "docx",
       "parent_node_token": "...",
-      "title": "FlashIdea",
+      "title": "Flash Idea",
       "has_child": true
     }
   }
@@ -140,7 +140,7 @@ Content-Type: application/json
   "obj_type": "docx",
   "node_type": "origin",
   "parent_node_token": "Fxr3wDmpAiTBELkjLdkcgAYOn5u",
-  "title": "FlashIdea - 2026-05-19"
+  "title": "Flash Idea - 2026-05-19"
 }
 ```
 
@@ -154,7 +154,7 @@ Content-Type: application/json
       "node_token": "新node_token",
       "obj_token": "新obj_token（用于 docx API 写内容）",
       "obj_type": "docx",
-      "title": "FlashIdea - 2026-05-19"
+      "title": "Flash Idea - 2026-05-19"
     }
   }
 }
@@ -183,7 +183,7 @@ Authorization: Bearer <tenant_access_token>
         "node_token": "...",
         "obj_token": "...",
         "obj_type": "docx",
-        "title": "FlashIdea - 2026-05-19"
+        "title": "Flash Idea - 2026-05-19"
       }
     ],
     "has_more": false,

@@ -684,7 +684,7 @@ mod tests {
                                 "node_token": "wiki-node",
                                 "obj_token": "docx-token",
                                 "obj_type": "docx",
-                                "title": "FlashIdea - 2026-05-19"
+                                "title": "Flash Idea - 2026-05-19"
                             }
                         }
                     })
@@ -694,7 +694,7 @@ mod tests {
         );
 
         let node = client
-            .create_wiki_child("space-123", "parent-node", "FlashIdea - 2026-05-19")
+            .create_wiki_child("space-123", "parent-node", "Flash Idea - 2026-05-19")
             .await
             .unwrap();
 
@@ -714,7 +714,7 @@ mod tests {
                 "obj_type": "docx",
                 "node_type": "origin",
                 "parent_node_token": "parent-node",
-                "title": "FlashIdea - 2026-05-19"
+                "title": "Flash Idea - 2026-05-19"
             })
         );
     }
@@ -741,14 +741,14 @@ mod tests {
                                     "node_token": "node-a",
                                     "obj_token": "doc-a",
                                     "obj_type": "docx",
-                                    "title": "FlashIdea - 2026-05-18"
+                                    "title": "Flash Idea - 2026-05-18"
                                 },
                                 {
                                     "space_id": "space-123",
                                     "node_token": "node-b",
                                     "obj_token": "doc-b",
                                     "obj_type": "docx",
-                                    "title": "FlashIdea - 2026-05-19"
+                                    "title": "Flash Idea - 2026-05-19"
                                 }
                             ],
                             "has_more": false
@@ -765,7 +765,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(children.len(), 2);
-        assert_eq!(children[0].title, "FlashIdea - 2026-05-18");
+        assert_eq!(children[0].title, "Flash Idea - 2026-05-18");
         assert_eq!(children[1].obj_token, "doc-b");
 
         let captured = captured.lock().unwrap();
@@ -873,7 +873,7 @@ mod tests {
         );
 
         let err = client
-            .create_wiki_child("space-123", "parent-node", "FlashIdea - 2026-05-19")
+            .create_wiki_child("space-123", "parent-node", "Flash Idea - 2026-05-19")
             .await
             .unwrap_err();
 

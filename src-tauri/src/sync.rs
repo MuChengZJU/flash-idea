@@ -140,9 +140,10 @@ async fn resolve_doc_id(
     } else {
         now.date_naive()
     };
-    let title = format!("FlashIdea - {}", doc_date.format("%Y-%m-%d"));
+    let title = format!("Flash Idea - {}", doc_date.format("%Y-%m-%d"));
+    let legacy_title = format!("FlashIdea - {}", doc_date.format("%Y-%m-%d"));
 
-    let new_doc_id = match find_existing_daily_doc(feishu_client, wiki, &title, &message.id).await
+    let new_doc_id = match find_existing_daily_doc(feishu_client, wiki, &[&title, &legacy_title], &message.id).await
     {
         Some(obj_token) => {
             eprintln!(
@@ -201,7 +202,7 @@ async fn resolve_doc_id(
 async fn find_existing_daily_doc(
     feishu_client: &FeishuClient,
     wiki: &WikiConfig,
-    title: &str,
+    titles: &[&str],
     message_id: &str,
 ) -> Option<String> {
     match feishu_client
@@ -209,15 +210,17 @@ async fn find_existing_daily_doc(
         .await
     {
         Ok(children) => {
-            for child in &children {
-                if child.title == title {
-                    return Some(child.obj_token.clone());
+            for title in titles {
+                for child in &children {
+                    if child.title == *title {
+                        return Some(child.obj_token.clone());
+                    }
                 }
             }
             eprintln!(
-                "find_existing_daily_doc: message_id={} no match for title={} among {} children",
+                "find_existing_daily_doc: message_id={} no match for titles={:?} among {} children",
                 message_id,
-                title,
+                titles,
                 children.len()
             );
             None
@@ -257,7 +260,8 @@ pub async fn pull_remote_messages(
     } else {
         now.date_naive()
     };
-    let title = format!("FlashIdea - {}", doc_date.format("%Y-%m-%d"));
+    let title = format!("Flash Idea - {}", doc_date.format("%Y-%m-%d"));
+    let legacy_title = format!("FlashIdea - {}", doc_date.format("%Y-%m-%d"));
 
     let doc_id = {
         let stored = if let Ok(conn) = db.lock() {
@@ -269,7 +273,7 @@ pub async fn pull_remote_messages(
         if let Some(id) = stored {
             id
         } else {
-            match find_existing_daily_doc(&client, &wiki, &title, "pull").await {
+            match find_existing_daily_doc(&client, &wiki, &[&title, &legacy_title], "pull").await {
                 Some(id) => {
                     if let Ok(conn) = db.lock() {
                         let _ = db::set_setting(&conn, "active_doc_id", &id);

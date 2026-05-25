@@ -1,4 +1,4 @@
-# FlashIdea 开发日志
+# Flash Idea 开发日志
 
 ## v0.2.2 — 2026-05-25
 
@@ -42,7 +42,7 @@
 
 #### 第 4 轮：版本号没 bump
 
-**症状**：构建成功，但产物文件名是 `FlashIdea_0.2.1` 而不是 `0.2.2`。
+**症状**：构建成功，但产物文件名是 `Flash-Idea_0.2.1` 而不是 `0.2.2`。
 
 **根因**：打 tag 前忘了改 `tauri.conf.json` 和 `Cargo.toml` 的版本号。
 
@@ -61,8 +61,8 @@ Mac DMG 5MB + Android APK 17.2MB，版本号正确。
 
 ### GitHub Release
 
-- Mac: `FlashIdea_0.2.2_aarch64.dmg`（5MB）
-- Android: `FlashIdea_0.2.2_arm64.apk`（17.2MB，release 签名）
+- Mac: `Flash-Idea_0.2.2_aarch64.dmg`（5MB）
+- Android: `Flash-Idea_0.2.2_arm64.apk`（17.2MB，release 签名）
 - https://github.com/MuChengZJU/FlashIdea/releases/tag/v0.2.2
 
 ---
@@ -78,8 +78,8 @@ Mac DMG 5MB + Android APK 17.2MB，版本号正确。
 
 ### GitHub Release
 
-- Mac: `FlashIdea_0.2.1_aarch64.dmg`（4.9MB）
-- Android: `FlashIdea_0.2.1_arm64.apk`（157MB，debug 签名）
+- Mac: `Flash-Idea_0.2.1_aarch64.dmg`（4.9MB）
+- Android: `Flash-Idea_0.2.1_arm64.apk`（157MB，debug 签名）
 - https://github.com/MuChengZJU/FlashIdea/releases/tag/v0.2.1
 
 ---
@@ -110,7 +110,7 @@ Mac DMG 5MB + Android APK 17.2MB，版本号正确。
 
 #### ~~P0: 多端同步 — 每个设备重复创建当日文档~~ ✅ 已修复
 
-**现象**：Mac 创建了 "FlashIdea - 2026-05-19"，手机端因为本地 SQLite 没有 `active_doc_id`，又创建了一个同名文档。
+**现象**：Mac 创建了 "Flash Idea - 2026-05-19"，手机端因为本地 SQLite 没有 `active_doc_id`，又创建了一个同名文档。
 
 **根因**：`resolve_doc_id` 只查本地 `active_doc_id` 和 `last_synced_at`，新设备没有本地状态就直接 `create_wiki_child`。
 

@@ -79,7 +79,7 @@ async fn main() {
 
     // Step 3: create wiki child
     eprintln!("\n--- Step 3: create_wiki_child ---");
-    let title = "FlashIdea - diagnose-test";
+    let title = "Flash Idea - diagnose-test";
     match client
         .create_wiki_child(&node.space_id, &wiki_node_token, title)
         .await

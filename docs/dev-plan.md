@@ -1,4 +1,4 @@
-# FlashIdea 开发计划
+# Flash Idea 开发计划
 
 > 本文档是 AI 可执行的开发 spec。每个任务自包含，可独立并行执行。
 > 执行方式：`codex exec -m gpt-5.5 "读 docs/dev-plan.md 的任务 N，执行"` 或 CC 直接执行。
@@ -129,11 +129,11 @@ CREATE TABLE IF NOT EXISTS messages (
    - tauri plugin 按需加（tauri-plugin-shell 等）
 
 4. `src-tauri/tauri.conf.json`:
-   - productName: "FlashIdea"
+   - productName: "Flash Idea"
    - identifier: "com.flashidea.app"
    - build.devUrl: "http://localhost:1420"
    - build.frontendDist: "../src"
-   - app.windows: 单窗口，title "FlashIdea"，宽 400 高 700
+   - app.windows: 单窗口，title "Flash Idea"，宽 400 高 700
 
 5. `.env.example`:
    ```
@@ -193,7 +193,7 @@ CREATE TABLE IF NOT EXISTS messages (
 纯 HTML + CSS + JS，不用框架。界面模仿微信/飞书单聊。
 
 1. **布局**：
-   - 顶部标题栏："FlashIdea"，固定在顶部
+   - 顶部标题栏："Flash Idea"，固定在顶部
    - 中间消息列表：可滚动，消息靠右（自己发的）
    - 底部输入区：输入框 + 发送按钮，固定在底部
 
@@ -269,7 +269,7 @@ CREATE TABLE IF NOT EXISTS messages (
      - 取所有 queued 消息，逐条调用 sync_message，每条间隔 350ms
      - 在 App 恢复前台时调用
 
-**验收：** `cargo build -p flashidea-app`（src-tauri 的 package name）编译通过。
+**验收：** `cargo build -p flash-idea`（src-tauri 的 package name）编译通过。
 
 ---
 

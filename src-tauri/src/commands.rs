@@ -277,9 +277,9 @@ pub async fn test_connection(state: State<'_, AppState>) -> Result<TestResult, S
 
     match client
         .append_text(
-            "__flashidea_connection_test__",
-            "FlashIdea connection test",
-            "flashidea-connection-test",
+            "__flash_idea_connection_test__",
+            "Flash Idea connection test",
+            "flash-idea-connection-test",
         )
         .await
     {

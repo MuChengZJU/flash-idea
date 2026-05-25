@@ -109,7 +109,9 @@ fn resolve_db_path_for_app(
     app: &tauri::App,
     env_path: Option<&Path>,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let configured_db_path = env::var("FLASHIDEA_DB_PATH").ok();
+    let configured_db_path = env::var("FLASH_IDEA_DB_PATH")
+        .or_else(|_| env::var("FLASHIDEA_DB_PATH"))
+        .ok();
 
     #[cfg(mobile)]
     let db_path = {
@@ -118,7 +120,10 @@ fn resolve_db_path_for_app(
         configured_db_path
             .filter(|s| !s.trim().is_empty())
             .map(|s| data_dir.join(s))
-            .unwrap_or_else(|| data_dir.join("flashidea.sqlite"))
+            .unwrap_or_else(|| {
+                let legacy = data_dir.join("flashidea.sqlite");
+                if legacy.exists() { legacy } else { data_dir.join("flash-idea.sqlite") }
+            })
     };
 
     #[cfg(not(mobile))]
@@ -213,7 +218,7 @@ fn resolve_db_path(
     let db_path = configured_path
         .filter(|value| !value.trim().is_empty())
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("flashidea.sqlite"));
+        .unwrap_or_else(|| PathBuf::from("flash-idea.sqlite"));
 
     if db_path.is_absolute() {
         Ok(db_path)
@@ -232,7 +237,7 @@ mod tests {
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir = env::temp_dir().join(format!(
-            "flashidea-main-test-{name}-{}",
+            "flash-idea-main-test-{name}-{}",
             std::process::id()
         ));
         let _ = fs::remove_dir_all(&dir);
@@ -262,7 +267,7 @@ mod tests {
         let db_path = resolve_db_path(None, Some(env_path.as_path())).expect("resolve db path");
 
         assert!(db_path.is_absolute());
-        assert_eq!(db_path, root.join("flashidea.sqlite"));
+        assert_eq!(db_path, root.join("flash-idea.sqlite"));
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }
 
@@ -270,18 +275,18 @@ mod tests {
     fn relative_configured_db_path_is_resolved_from_workspace_root() {
         let root = temp_dir("relative-db-path");
         let env_path = root.join(".env");
-        fs::write(&env_path, "FLASHIDEA_DB_PATH=data/flashidea.sqlite\n").expect("write env file");
+        fs::write(&env_path, "FLASH_IDEA_DB_PATH=data/flash-idea.sqlite\n").expect("write env file");
 
-        let db_path = resolve_db_path(Some("data/flashidea.sqlite"), Some(env_path.as_path()))
+        let db_path = resolve_db_path(Some("data/flash-idea.sqlite"), Some(env_path.as_path()))
             .expect("resolve db path");
 
-        assert_eq!(db_path, root.join("data").join("flashidea.sqlite"));
+        assert_eq!(db_path, root.join("data").join("flash-idea.sqlite"));
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }
 
     #[test]
     fn absolute_configured_db_path_is_preserved() {
-        let configured = Path::new("/tmp/flashidea.sqlite");
+        let configured = Path::new("/tmp/flash-idea.sqlite");
 
         let db_path = resolve_db_path(configured.to_str(), None).expect("resolve db path");
 

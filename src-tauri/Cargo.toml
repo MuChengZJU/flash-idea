@@ -1,12 +1,12 @@
 [package]
-name = "flashidea"
+name = "flash-idea"
 version = "0.2.2"
-description = "FlashIdea"
-authors = ["FlashIdea"]
+description = "Flash Idea"
+authors = ["Flash Idea"]
 edition = "2021"
 
 [lib]
-name = "flashidea_lib"
+name = "flash_idea_lib"
 crate-type = ["staticlib", "cdylib", "lib"]
 
 [build-dependencies]
