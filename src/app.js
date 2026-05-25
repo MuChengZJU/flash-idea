@@ -389,7 +389,11 @@
     testButton.disabled = true;
     setSettingsStatus("正在测试连接...", null);
     try {
-      const result = await invoke("test_connection");
+      const result = await invoke("test_connection", {
+        appId: cfgAppId.value || null,
+        appSecret: cfgAppSecret.value || null,
+        wikiNodeToken: cfgWikiToken.value || null,
+      });
       if (result && result.success) {
         setSettingsStatus("连接成功", "success");
       } else {

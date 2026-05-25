@@ -248,9 +248,20 @@ pub async fn save_config(
 }
 
 #[tauri::command]
-pub async fn test_connection(state: State<'_, AppState>) -> Result<TestResult, String> {
-    let (app_id, app_secret, wiki_node_token, _) = read_effective_config(&state)?;
-    if app_id.trim().is_empty() || app_secret.trim().is_empty() {
+pub async fn test_connection(
+    app_id: Option<String>,
+    app_secret: Option<String>,
+    wiki_node_token: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<TestResult, String> {
+    let form_app_id = app_id.unwrap_or_default().trim().to_string();
+    let form_app_secret = app_secret.unwrap_or_default().trim().to_string();
+    let form_wiki_node_token = wiki_node_token.unwrap_or_default().trim().to_string();
+
+    let (saved_app_id, saved_app_secret, saved_wiki_node_token, _) = read_effective_config(&state)?;
+    let use_form_credentials = !form_app_id.is_empty() && !form_app_secret.is_empty();
+
+    if !use_form_credentials && (saved_app_id.trim().is_empty() || saved_app_secret.trim().is_empty()) {
         return Ok(TestResult {
             success: false,
             token_ok: false,
@@ -259,19 +270,24 @@ pub async fn test_connection(state: State<'_, AppState>) -> Result<TestResult, S
         });
     }
 
-    let client = {
+    let client = if use_form_credentials {
+        Arc::new(FeishuClient::new(form_app_id, form_app_secret))
+    } else {
         let guard = state.feishu_client.read().await;
         Arc::clone(&*guard)
     };
 
-    if !wiki_node_token.trim().is_empty() {
-        return match sync::init_wiki(&client, &wiki_node_token).await {
-            Ok(cfg) => {
-                let mut guard = state.wiki.write().await;
-                *guard = Some(Arc::new(cfg));
+    let wiki_token = if form_wiki_node_token.is_empty() {
+        saved_wiki_node_token
+    } else {
+        form_wiki_node_token
+    };
 
+    if !wiki_token.trim().is_empty() {
+        return match sync::init_wiki(&client, &wiki_token).await {
+            Ok(_) => {
                 if let Ok(conn) = state.db.lock() {
-                    let _ = db::insert_log(&conn, "info", "test", "连接测试通过，wiki 已初始化");
+                    let _ = db::insert_log(&conn, "info", "test", "连接测试通过，wiki 可用");
                 }
                 Ok(TestResult {
                     success: true,
@@ -330,7 +346,7 @@ pub async fn export_logs(state: State<'_, AppState>) -> Result<String, String> {
 
     let (app_id, _, wiki_node_token, from_env) = read_effective_config_from_conn(&conn);
     let app_id_display = if app_id.is_empty() { "未配置".to_string() } else { app_id_prefix(&app_id) };
-    let wiki_display = if wiki_node_token.is_empty() { "未配置".to_string() } else { format!("{}...", &wiki_node_token[..wiki_node_token.len().min(8)]) };
+    let wiki_display = if wiki_node_token.is_empty() { "未配置".to_string() } else { wiki_token_preview(&wiki_node_token) };
     out.push_str(&format!(
         "配置来源: {} | App ID: {} | Wiki Token: {}\n\n",
         if from_env { "环境变量" } else { "应用内" },
@@ -349,11 +365,10 @@ pub async fn export_logs(state: State<'_, AppState>) -> Result<String, String> {
     if !failed.is_empty() {
         out.push_str("\n--- 失败消息 ---\n");
         for msg in &failed {
-            let text_preview: String = msg.text.chars().take(50).collect();
             out.push_str(&format!(
                 "[{}] \"{}\" → {}\n",
                 msg.created_at,
-                text_preview,
+                failed_message_preview(&msg.text),
                 msg.error_reason.as_deref().unwrap_or("未知错误"),
             ));
         }
@@ -410,25 +425,29 @@ fn env_setting(key: &str) -> Option<String> {
 }
 
 fn config_from_env() -> bool {
-    env_setting(APP_ID_ENV).is_some()
-        || env_setting(APP_SECRET_ENV).is_some()
-        || env_setting(WIKI_NODE_TOKEN_ENV).is_some()
+    env_setting(APP_ID_ENV).is_some() && env_setting(APP_SECRET_ENV).is_some()
 }
 
 fn secret_hint(secret: &str) -> String {
     if secret.is_empty() {
         return String::new();
     }
-
-    let suffix = secret
-        .chars()
-        .rev()
-        .take(4)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect::<String>();
+    let chars: Vec<char> = secret.chars().collect();
+    if chars.len() <= 4 {
+        return "****".to_string();
+    }
+    let suffix: String = chars[chars.len() - 4..].iter().collect();
     format!("****{suffix}")
+}
+
+fn wiki_token_preview(token: &str) -> String {
+    let prefix: String = token.chars().take(8).collect();
+    format!("{prefix}...")
+}
+
+fn failed_message_preview(text: &str) -> String {
+    let prefix: String = text.chars().take(2).collect();
+    format!("{prefix}***")
 }
 
 fn app_id_prefix(app_id: &str) -> String {
