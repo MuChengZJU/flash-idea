@@ -75,10 +75,15 @@ jobs:
         env:
           NDK_HOME: /usr/local/lib/android/sdk/ndk/27.0.12077973
 
+      - name: Rename APK
+        run: |
+          APK=$(find src-tauri/gen/android -name "*.apk" -type f | head -1)
+          VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
+          cp "$APK" "FlashIdea_${VERSION}_arm64.apk"
+
       - name: Upload APK to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: src-tauri/gen/android/app/build/outputs/apk/arm64/debug/app-arm64-debug.apk
-          fail_on_unmatched_files: false
+          files: FlashIdea_*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
