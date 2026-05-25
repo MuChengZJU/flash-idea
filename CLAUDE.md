@@ -49,6 +49,43 @@ flashidea/
 - 冷启动目标: < 500ms（T4 - T0）
 - 视觉方向: 闪电琥珀（暖黄色调），设计锚点"秒开"
 
+## 发版流程
+
+每次发新版本：
+
+1. **Bump 版本号**（两个文件必须同步改）：
+   - `src-tauri/tauri.conf.json` → `"version": "x.y.z"`
+   - `src-tauri/Cargo.toml` → `version = "x.y.z"`
+
+2. **提交并打 tag**：
+   ```bash
+   git add -A && git commit -m "feat: vx.y.z 版本说明"
+   git tag vx.y.z
+   ```
+
+3. **推送触发 CI/CD**：
+   ```bash
+   git push && git push --tags
+   ```
+   GitHub Actions 会自动构建 Mac DMG + Android APK，发布到 Release 页面。
+
+4. **本地构建（如需手动）**：
+   ```bash
+   # Mac DMG
+   cargo tauri build --target aarch64-apple-darwin
+   # 产物: target/aarch64-apple-darwin/release/bundle/dmg/
+
+   # Android APK
+   cargo tauri android build --apk --debug --target aarch64
+   # 产物: src-tauri/gen/android/app/build/outputs/apk/arm64/debug/
+   # 安装: adb install -r <apk路径>（覆盖安装，保留数据）
+   ```
+
+注意：
+- 每次有代码改动都要 bump patch 版本号
+- Android 用 `adb install -r` 覆盖安装，不要卸载重装（会丢 SQLite 数据）
+- 不要自动 push，等确认后再推
+
 ## 开发计划
 
 详见 `docs/dev-plan.md`。4 个任务，任务 1 完成后 2/3/4 可并行。
