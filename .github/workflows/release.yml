@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -24,18 +24,18 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Build Tauri (aarch64)
-        uses: tauri-apps/tauri-action@v0
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli
+
+      - name: Build Mac DMG
+        run: cargo tauri build --target aarch64-apple-darwin
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ''
-        with:
-          args: --target aarch64-apple-darwin
-          tagName: ${{ github.ref_name }}
-          releaseName: ${{ github.ref_name }}
-          releaseBody: 'See the assets below for download.'
-          releaseDraft: false
-          prerelease: false
 
   build-android:
     runs-on: ubuntu-latest
@@ -70,21 +70,15 @@ jobs:
       - name: Init Android project
         run: cargo tauri android init
 
-      - name: Build Android APK (arm64 debug)
-        env:
-          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+      - name: Build Android APK
         run: cargo tauri android build --apk --debug --target aarch64
-
-      - name: Get version
-        id: version
-        run: echo "version=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\(.*\)".*/\1/')" >> $GITHUB_OUTPUT
+        env:
+          NDK_HOME: /usr/local/lib/android/sdk/ndk/27.0.12077973
 
       - name: Upload APK to Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            src-tauri/gen/android/app/build/outputs/apk/arm64/debug/app-arm64-debug.apk
+          files: src-tauri/gen/android/app/build/outputs/apk/arm64/debug/app-arm64-debug.apk
           fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
