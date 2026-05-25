@@ -71,6 +71,20 @@ fn needs_new_doc(last_synced_at: Option<&str>, now_created_at: &str) -> bool {
     now_day_date > last_day_date
 }
 
+fn network_retry_backoff_delay(retry_count: i64) -> Option<Duration> {
+    match retry_count {
+        1..=5 => Some(Duration::from_secs(1 << (retry_count - 1))),
+        _ => None,
+    }
+}
+
+fn resolve_pull_doc_id(
+    found_daily_doc_id: Option<String>,
+    stored_doc_id: Option<String>,
+) -> Option<String> {
+    found_daily_doc_id.or(stored_doc_id)
+}
+
 async fn resolve_doc_id(
     feishu_client: &FeishuClient,
     db: &Mutex<Connection>,
@@ -265,28 +279,26 @@ pub async fn pull_remote_messages(
     let title = format!("Flash Idea - {}", doc_date.format("%Y-%m-%d"));
     let legacy_title = format!("FlashIdea - {}", doc_date.format("%Y-%m-%d"));
 
-    let doc_id = {
-        let stored = if let Ok(conn) = db.lock() {
-            db::get_setting(&conn, "active_doc_id").ok().flatten()
-        } else {
-            None
-        };
-
-        if let Some(id) = stored {
-            id
-        } else {
-            match find_existing_daily_doc(&client, &wiki, &[&title, &legacy_title], "pull").await {
-                Some(id) => {
-                    if let Ok(conn) = db.lock() {
-                        let _ = db::set_setting(&conn, "active_doc_id", &id);
-                    }
-                    id
-                }
-                None => {
-                    eprintln!("pull_remote_messages: no existing doc for {title}, skip pull");
-                    return;
-                }
+    let stored = if let Ok(conn) = db.lock() {
+        db::get_setting(&conn, "active_doc_id").ok().flatten()
+    } else {
+        None
+    };
+    // Pull must validate today's wiki doc first; a stored active_doc_id can point
+    // at yesterday's doc after a day boundary and would misdate pulled messages.
+    let found = find_existing_daily_doc(&client, &wiki, &[&title, &legacy_title], "pull").await;
+    if let Some(ref id) = found {
+        if stored.as_deref() != Some(id.as_str()) {
+            if let Ok(conn) = db.lock() {
+                let _ = db::set_setting(&conn, "active_doc_id", id);
             }
+        }
+    }
+    let doc_id = match resolve_pull_doc_id(found, stored) {
+        Some(id) => id,
+        None => {
+            eprintln!("pull_remote_messages: no existing doc for {title}, skip pull");
+            return;
         }
     };
 
@@ -451,18 +463,29 @@ pub async fn sync_message(
                     message.retry_count + 1
                 };
 
-                if retry_count >= 5 {
-                    let reason = user_friendly_error(&err);
-                    eprintln!(
-                        "sync_message: message_id={} failed after 5 retries: {:?}",
-                        message.id, err
-                    );
-                    if let Ok(conn) = db.lock() {
-                        let _ = db::update_sync_status(&conn, &message.id, "failed", None, Some(&reason));
-                        let _ = db::insert_log(&conn, "error", "sync", &format!("msg={} {reason} (retries=5)", message.id));
-                    }
-                    emit_status(&app_handle, &message.id, "failed", Some(&reason));
+                // Keep network failures queued inside this task: persist retry
+                // count, wait with exponential backoff, then try append again.
+                if let Some(delay) = network_retry_backoff_delay(retry_count) {
+                    sleep(delay).await;
+                    continue;
                 }
+
+                let reason = user_friendly_error(&err);
+                eprintln!(
+                    "sync_message: message_id={} failed after 5 retries: {:?}",
+                    message.id, err
+                );
+                if let Ok(conn) = db.lock() {
+                    let _ =
+                        db::update_sync_status(&conn, &message.id, "failed", None, Some(&reason));
+                    let _ = db::insert_log(
+                        &conn,
+                        "error",
+                        "sync",
+                        &format!("msg={} {reason} (retries=5)", message.id),
+                    );
+                }
+                emit_status(&app_handle, &message.id, "failed", Some(&reason));
                 return;
             }
             Err(ref err @ FeishuError::RateLimited)
@@ -541,6 +564,46 @@ fn user_friendly_error(err: &FeishuError) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_network_retry_backoff_sequence() {
+        let delays: Vec<_> = (1..=5)
+            .map(network_retry_backoff_delay)
+            .collect::<Option<Vec<_>>>()
+            .expect("five network failures should have backoff delays");
+
+        assert_eq!(
+            delays,
+            vec![
+                Duration::from_secs(1),
+                Duration::from_secs(2),
+                Duration::from_secs(4),
+                Duration::from_secs(8),
+                Duration::from_secs(16),
+            ]
+        );
+        assert_eq!(network_retry_backoff_delay(6), None);
+    }
+
+    #[test]
+    fn test_pull_doc_resolution_prefers_today_search_over_stored_id() {
+        assert_eq!(
+            resolve_pull_doc_id(
+                Some("today-doc".to_string()),
+                Some("yesterday-doc".to_string())
+            ),
+            Some("today-doc".to_string())
+        );
+    }
+
+    #[test]
+    fn test_pull_doc_resolution_falls_back_to_stored_id() {
+        assert_eq!(
+            resolve_pull_doc_id(None, Some("stored-doc".to_string())),
+            Some("stored-doc".to_string())
+        );
+        assert_eq!(resolve_pull_doc_id(None, None), None);
+    }
 
     #[test]
     fn test_needs_new_doc_no_history() {
