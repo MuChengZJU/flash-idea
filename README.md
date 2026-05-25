@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/logo.png" width="200" alt="FlashIdea Logo" />
+</p>
+
 # FlashIdea
 
 零摩擦语音捕捉管道。点击图标 → 聊天气泡界面 → 语音转文字（系统输入法）→ 发送 → 自动追加到飞书云文档。
