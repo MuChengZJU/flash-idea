@@ -5,14 +5,65 @@
 ### 新增
 
 - **项目 Logo**：胶囊闪电 + 声波图标，README 顶部展示
-- **应用图标替换**：用 logo 裁剪生成全平台图标（Mac .icns / Windows .ico / Android mipmap / iOS），替换 Tauri 默认图标
+- **应用图标替换**：用 logo 裁剪（去掉文字部分）生成全平台图标（`cargo tauri icon`）
 - **GitHub Actions CI/CD**：推送 `v*` tag 自动构建 Mac DMG + Android APK，发布到 GitHub Release
-- **发版流程文档**：CLAUDE.md 写入标准发版操作步骤
+- **Android release 构建**：APK 从 145MB（debug）降到 17MB（release + minify）
 
 ### 发版方式变更
 
 之前：本地手动构建 → 手动上传 Release
-现在：`git tag vx.y.z && git push --tags` → CI 自动构建发布
+现在：bump 版本号 → `git tag vx.y.z && git push --tags` → CI 自动构建发布
+
+### CI/CD 搭建踩坑（5 轮迭代）
+
+#### 第 1 轮：workflow 无法解析
+
+**症状**：GitHub Actions 显示 failure，0 个 job，workflow 名显示为文件路径而不是 `name` 字段值。
+
+**根因**：用了 `tauri-apps/tauri-action@v0`，GitHub 解析失败。
+
+**修复**：不用封装 action，直接跑 `cargo tauri build` 命令，更可控。
+
+#### 第 2 轮：Android APK 路径不匹配
+
+**症状**：Mac 成功，Android 上传步骤报 `Pattern does not match any files`。
+
+**根因**：本地构建产物在 `apk/arm64/debug/app-arm64-debug.apk`，CI 上 `cargo tauri android init` 重新生成项目后产物在 `apk/universal/debug/app-universal-debug.apk`。
+
+**修复**：用 `find` 通配查找 APK 文件，不写死路径。
+
+#### 第 3 轮：Gradle 依赖下载 502
+
+**症状**：`Could not HEAD 'https://maven.aliyun.com/repository/google/...' Received status code 502 from server: Bad Gateway`
+
+**根因**：`build.gradle.kts` 里阿里云镜像排在 `google()` / `mavenCentral()` 前面。GitHub CI runner 在海外，访问阿里云镜像 502，Gradle 缓存失败后不会回退到后面的官方源。
+
+**修复**：`build.gradle.kts` 里阿里云镜像用 `if (System.getenv("CI") == null)` 包裹，本地继续用镜像加速，CI 直接用官方源。
+
+#### 第 4 轮：版本号没 bump
+
+**症状**：构建成功，但产物文件名是 `FlashIdea_0.2.1` 而不是 `0.2.2`。
+
+**根因**：打 tag 前忘了改 `tauri.conf.json` 和 `Cargo.toml` 的版本号。
+
+**修复**：bump 版本号，同时把 Android 从 debug 切到 release 构建。
+
+#### 第 5 轮：成功
+
+Mac DMG 5MB + Android APK 17.2MB，版本号正确。
+
+### 关键经验
+
+- **CI ≠ 本地**：网络环境（镜像源）、文件路径、NDK 版本都可能不同
+- **先跑最小版本**：别一上来就写完整双平台 workflow
+- **直接命令 > 封装 action**：`cargo tauri build` 比 `tauri-apps/tauri-action` 更好调试
+- **release 构建**：发布用 release 不用 debug，体积差 8 倍。CI 自动 `keytool` 生成签名密钥即可
+
+### GitHub Release
+
+- Mac: `FlashIdea_0.2.2_aarch64.dmg`（5MB）
+- Android: `FlashIdea_0.2.2_arm64.apk`（17.2MB，release 签名）
+- https://github.com/MuChengZJU/FlashIdea/releases/tag/v0.2.2
 
 ---
 
@@ -69,17 +120,9 @@
 
 新增 API：`list_wiki_children`（支持分页）、`get_document_raw_content`
 
-#### P1: 手机端 WebView 键盘交互
+#### ~~P1: 手机端 WebView 键盘交互~~ ✅ v0.2.1 已修复
 
-**现象**：点击输入框后键盘弹出，整个页面上移/错位，输入区域可能被遮挡或布局异常。
-
-**根因**：Android WebView 处理虚拟键盘时的 viewport 行为和桌面浏览器不同，`100dvh` / `100vh` 在键盘弹出时的表现不一致。
-
-**方案方向**：
-- 使用 `visualViewport` API 监听键盘高度变化，动态调整布局
-- AndroidManifest 的 `windowSoftInputMode` 设置（`adjustResize` vs `adjustPan`）
-- CSS `env(keyboard-inset-bottom)` 或 JS polyfill
-- 需要在真机上实际调试交互细节
+**修复方案**：`visualViewport` API 动态计算高度 + `adjustResize` + CSS 变量 `--app-height`
 
 ### Android 构建 & 安装
 
@@ -95,9 +138,8 @@ export NDK_HOME="$ANDROID_HOME/ndk/$(ls $ANDROID_HOME/ndk/ | head -1)"
 # 构建 debug APK（手机用这个）
 cargo tauri android build --apk --debug
 
-# 卸载旧版（避免签名冲突）+ 安装
-adb shell pm uninstall com.flashidea.app
-adb install src-tauri/gen/android/app/build/outputs/apk/arm64/debug/app-arm64-debug.apk
+# 覆盖安装（保留数据）
+adb install -r src-tauri/gen/android/app/build/outputs/apk/arm64/debug/app-arm64-debug.apk
 ```
 
 踩坑记录：
