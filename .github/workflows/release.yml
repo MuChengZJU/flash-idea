@@ -51,8 +51,12 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install NDK
-        run: sdkmanager "ndk;27.0.12077973"
+      - name: Find NDK
+        id: ndk
+        run: |
+          NDK_DIR=$(ls -d $ANDROID_HOME/ndk/*/ 2>/dev/null | head -1 | sed 's:/$::')
+          echo "NDK_HOME=$NDK_DIR" >> $GITHUB_ENV
+          echo "Found NDK: $NDK_DIR"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -72,8 +76,6 @@ jobs:
 
       - name: Build Android APK
         run: cargo tauri android build --apk --debug --target aarch64
-        env:
-          NDK_HOME: /usr/local/lib/android/sdk/ndk/27.0.12077973
 
       - name: Rename APK
         run: |
