@@ -1,5 +1,22 @@
 # FlashIdea 开发日志
 
+## v0.2.1 — 2026-05-25
+
+### 修复
+
+- **Android 白屏**：启动窗口背景色匹配应用主题（浅米 / 暗色），HTML 加载状态消除闪屏
+- **消息排序**：云端同步消息按 `created_at` 正确排列，不再追加到列表末尾
+- **Android 键盘交互**：`visualViewport` 动态高度 + `adjustResize`，微信风格输入体验
+- **版本号流程**：每次改动 bump patch，`adb install -r` 覆盖安装保留数据
+
+### GitHub Release
+
+- Mac: `FlashIdea_0.2.1_aarch64.dmg`（4.9MB）
+- Android: `FlashIdea_0.2.1_arm64.apk`（157MB，debug 签名）
+- https://github.com/MuChengZJU/FlashIdea/releases/tag/v0.2.1
+
+---
+
 ## v0.2.0 — 2026-05-19
 
 ### 本版本新增
